@@ -1,9 +1,12 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const bcrypt = require('bcrypt-nodejs');
+const cors = require('cors');
 
 const app = express();
 // In order to parse the info from the page to server we need to use this:
 app.use(bodyParser.json()); // and further in the code call it with .body method
+app.use(cors()); // to be able to use chrome for localhost requests
 
 // temporary database jus to check whether the name and password is working - keep checking by Postman
 
@@ -21,10 +24,10 @@ const database = {
 	users: [
 		{
 			id: '123',
-			name: 'John',
+			name: 'Jano',
 			email: 'john@gmail.com',
 			password:'cookies',
-			entries: 0,
+			entries: 2,
 			joined: new Date()
 		},
 		{
@@ -45,9 +48,19 @@ app.get('/', (req, res) => {
 
 // SIGN IN
 app.post('/signin', (req, res) => {
+	// if I enter correct password from postman POST request to signin:
+	bcrypt.compare(req.body.password, '$2a$10$oOGBN9acdCXq6IS3n.hDJ.jaJLk1OT27blHUOwaIkXkCBVwlIeRJ2', function(err, res) {
+    console.log('first',res)
+  });
+
+  // if I enter wrong password
+  bcrypt.compare("cooks", '$2a$10$oOGBN9acdCXq6IS3n.hDJ.jaJLk1OT27blHUOwaIkXkCBVwlIeRJ2', function(err, res) {
+    console.log('second',res)
+  });
+
 	if (req.body.email === database.users[0].email &&
 		req.body.password === database.users[0].password) {
-		res.json('success') // replacing .send with .json will result in sending the JSON format values instead just the standard data values
+		res.json(database.users[0]) // replacing .send with .json will result in sending the JSON format values instead just the standard data values
 } else {
 		res.status(400).json('error logging In') // .status is to generate the status code (400)and logs the message
 	};
@@ -55,11 +68,13 @@ app.post('/signin', (req, res) => {
 
 // REGISTER
 app.post('/register', (req, res) => {
+	bcrypt.hash(req.body.password, null, null, function(err, hash) {
+    console.log(hash)
+  });
 	database.users.push({ //to push new entry into the database
-			id: '125',
+			id: '128',
 			name: req.body.name,
 			email: req.body.email,
-			password:req.body.password,
 			entries: 0,
 			joined: new Date()
 	});
@@ -82,7 +97,7 @@ app.get('/profile/:id', (req, res) => {
 })
 
 //UPDATE IMAGE COUNT
-app.post('/image', (req, res) => {
+app.put('/image', (req, res) => {
 	const { id } = req.body; // need to find user by using id again
 	let found = false;
 	database.users.forEach(user => {
