@@ -36,34 +36,34 @@ app.use(cors()); // to be able to use chrome for localhost requests
 */
 
 // fake database for testing
-const database = {
-	users: [
-		{
-			id: '123',
-			name: 'Jano',
-			email: 'john@gmail.com',
-			password:'cookies',
-			entries: 2,
-			joined: new Date()
-		},
-		{
-			id: '124',
-			name: 'Sally',
-			email: 'sally@gmail.com',
-			password: 'bananas',
-			entries: 0,
-			joined: new Date()
-		},
-		{
-			id: '125',
-			name: 'Jano',
-			email: 'john@gmail.com',
-			password:'sracka',
-			entries: 45,
-			joined: new Date()
-		}
-	]
-}
+// const database = {
+// 	users: [
+// 		{
+// 			id: '123',
+// 			name: 'Jano',
+// 			email: 'john@gmail.com',
+// 			password:'cookies',
+// 			entries: 2,
+// 			joined: new Date()
+// 		},
+// 		{
+// 			id: '124',
+// 			name: 'Sally',
+// 			email: 'sally@gmail.com',
+// 			password: 'bananas',
+// 			entries: 0,
+// 			joined: new Date()
+// 		},
+// 		{
+// 			id: '125',
+// 			name: 'Jano',
+// 			email: 'john@gmail.com',
+// 			password:'sracka',
+// 			entries: 45,
+// 			joined: new Date()
+// 		}
+// 	]
+// }
 
 // root directory - will show us all the registered users in the database
 app.get('/', (req, res) => {
@@ -72,37 +72,46 @@ app.get('/', (req, res) => {
 
 // SIGN IN
 app.post('/signin', (req, res) => {
-	// if I enter correct password from postman POST request to signin:
-	bcrypt.compare(req.body.password, '$2a$10$oOGBN9acdCXq6IS3n.hDJ.jaJLk1OT27blHUOwaIkXkCBVwlIeRJ2', function(err, res) {
-    console.log('first',res)
-  });
-
-  // if I enter wrong password
-  bcrypt.compare("cooks", '$2a$10$oOGBN9acdCXq6IS3n.hDJ.jaJLk1OT27blHUOwaIkXkCBVwlIeRJ2', function(err, res) {
-    console.log('second',res)
-  });
-
-	if (req.body.email === database.users[2].email &&
-		req.body.password === database.users[2].password) {
-		res.json(database.users[2]) // replacing .send with .json will result in sending the JSON format values instead just the standard data values
-} else {
-		res.status(400).json('error logging In') // .status is to generate the status code (400)and logs the message
-	};
+	db.select('email', 'hash').from('login')
+	.where('email', '=', req.body.email)
+		.then(data => {
+			const isValid = bcrypt.compareSync(req.body.password, data[0].hash);
+			if (isValid) {
+				return db.select('*').from('users')
+					.where('email', '=', req.body.email)
+					.then(user => {
+						res.json(user[0])
+					})					
+			} else {
+				res.status(400).json('wrong password')
+			}
+		}).catch(err => res.status(400).json('wrong credentials'))
 })
 
 // REGISTER
 app.post('/register', (req, res) => {
 	const { email, name, password } = req.body;
-	db('users')
-		.returning('*') // this ensures the user data will be returned (all '*')
-		.insert({
-			email: email,
-			name: name,
-			joined: new Date()
-		}).then(user => {
-			res.json(user[0]);
-		}).catch(err => 
-					res.status(400).json('user exist')); // if I would put err in the json response I would get all the user data back - security issue, we can not send user data through internet, co instead we respond with 'unable to join'
+	const hash = bcrypt.hashSync(password); // encrypts the entered password
+	db.transaction(trx => { // I do transaction when I need more than one thing to execute (write in wo tables). I replace .db with .trx and use this to update both tables. 
+		trx.insert({ //inserting these two into the login table
+			hash: hash,
+			email: email
+		})
+		.into('login') // pick the correct table - first one to write to
+		.returning('email') // returning email from inserted info above to use further
+		.then(loginEmail => { // then use this email as new property for other table 'users'
+			return trx('users')
+				.returning('*') // this ensures the user data will be returned (all '*')
+				.insert({
+					email: email,
+					name: name,
+					joined: new Date()
+				})
+				.then(user => {res.json(user[0]); // response from return part in json (in the user variable)
+				})
+		}).then(trx.commit) // then I have to commit in order to write the information to database after passing all the conditions above
+			.catch(trx.rollback) //and if anything fails, I will get rollback - nothing will be commited
+		}).catch(err => res.status(400).json('unable to register')); // if I would put err in the json response I would get all the user data back - security issue, we can not send user data through internet, co instead we respond with 'unable to join'
 });
 
 //GET USER DATA
