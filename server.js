@@ -2,8 +2,24 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcrypt-nodejs');
 const cors = require('cors');
+const knex = require('knex');
 
 const app = express();
+
+const db = knex({
+  client: 'pg',
+  connection: {
+    host : '127.0.0.1', // this number '127.0.0.1' means localhost
+    user : 'postgres',
+    password : 'mrdance11',
+    database : 'faceapp'
+  }
+});
+
+// db.select('*').from('users').then(data => {
+// 	console.log(data)
+// });
+
 // In order to parse the info from the page to server we need to use this:
 app.use(bodyParser.json()); // and further in the code call it with .body method
 app.use(cors()); // to be able to use chrome for localhost requests
@@ -19,7 +35,7 @@ app.use(cors()); // to be able to use chrome for localhost requests
 /image --> PUT -- user data
 */
 
-
+// fake database for testing
 const database = {
 	users: [
 		{
@@ -36,6 +52,14 @@ const database = {
 			email: 'sally@gmail.com',
 			password: 'bananas',
 			entries: 0,
+			joined: new Date()
+		},
+		{
+			id: '125',
+			name: 'Jano',
+			email: 'john@gmail.com',
+			password:'sracka',
+			entries: 45,
 			joined: new Date()
 		}
 	]
@@ -58,9 +82,9 @@ app.post('/signin', (req, res) => {
     console.log('second',res)
   });
 
-	if (req.body.email === database.users[0].email &&
-		req.body.password === database.users[0].password) {
-		res.json(database.users[0]) // replacing .send with .json will result in sending the JSON format values instead just the standard data values
+	if (req.body.email === database.users[2].email &&
+		req.body.password === database.users[2].password) {
+		res.json(database.users[2]) // replacing .send with .json will result in sending the JSON format values instead just the standard data values
 } else {
 		res.status(400).json('error logging In') // .status is to generate the status code (400)and logs the message
 	};
@@ -68,48 +92,47 @@ app.post('/signin', (req, res) => {
 
 // REGISTER
 app.post('/register', (req, res) => {
-	bcrypt.hash(req.body.password, null, null, function(err, hash) {
-    console.log(hash)
-  });
-	database.users.push({ //to push new entry into the database
-			id: '128',
-			name: req.body.name,
-			email: req.body.email,
-			entries: 0,
+	const { email, name, password } = req.body;
+	db('users')
+		.returning('*') // this ensures the user data will be returned (all '*')
+		.insert({
+			email: email,
+			name: name,
 			joined: new Date()
-	});
-	res.json(database.users[database.users.length - 1]); // this will get us the last entry in the database, last id.
+		}).then(user => {
+			res.json(user[0]);
+		}).catch(err => 
+					res.status(400).json('user exist')); // if I would put err in the json response I would get all the user data back - security issue, we can not send user data through internet, co instead we respond with 'unable to join'
 });
 
 //GET USER DATA
 app.get('/profile/:id', (req, res) => {
 	const { id } = req.params; // need to find user by id to get his data
-	let found = false;
-	database.users.forEach(user => {
-		if (user.id === id) {
-			found = true;
-			return res.json(user); //I have to use return to finish the loop, not to continue to search
-		} 
-	})
-	if (!found) {
-		res.status(404).json('user not found')
-	}
+	db.select('*').from('users')
+		.where({id: id})
+		.then(user => {
+			if (user.length) {
+				res.json(user)
+			} else {
+				res.status(400).json('not found')
+			}
+		})	
+		.catch(err => {res.status(400).json('error getting user')})
 })
 
 //UPDATE IMAGE COUNT
 app.put('/image', (req, res) => {
 	const { id } = req.body; // need to find user by using id again
-	let found = false;
-	database.users.forEach(user => {
-		if (user.id === id) {
-			found = true;
-			user.entries++ // increases the entries count by 1
-			return res.json(user.entries); //I have to use return to finish the loop, not to continue to search
-		} 
-	})
-	if (!found) {
-		res.status(404).json('user not found')
-	}
+	db.select('*'). from('users')
+		.where({id: id})
+		.increment('entries', 1) // increments the count of entries by one
+		.returning('entries')
+		.then(entries => {
+			res.json(entries)
+		})
+		.catch(err => {
+			res.status(400).json('unable to get count')
+		})
 })
 
 app.listen(3000, () => {
