@@ -13,7 +13,7 @@ const app = express();
 const db = knex({
   client: 'pg',
   connection: {
-    host : '127.0.0.1',
+    host : 'postgresql-crystalline-06815',
     user : 'postgres',
     password : 'mrdance11',
     database : 'faceapp'
